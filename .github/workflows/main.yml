@@ -12,17 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Maximize build space
-      uses: easimon/maximize-build-space@master
-      with:
-        root-reserve-mb: 4096
-        swap-size-mb: 2048
-        remove-dotnet: 'true'
-        remove-android: 'false'
-        remove-haskell: 'true'
-        remove-codeql: 'true'
-        remove-docker-images: 'true'
-    
     - name: Checkout code
       uses: actions/checkout@v4
       
@@ -48,11 +37,8 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
       
-    - name: Clean build (to avoid memory issues)
-      run: ./gradlew clean --no-daemon
-      
-    - name: Build Debug APK with memory options
-      run: ./gradlew assembleDebug --no-daemon -Dorg.gradle.jvmargs="-Xmx2048m -XX:+HeapDumpOnOutOfMemoryError"
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug
       
     - name: Upload APK
       uses: actions/upload-artifact@v4
