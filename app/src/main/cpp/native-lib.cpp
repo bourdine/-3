@@ -9,7 +9,12 @@
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-#ifdef HAVE_XMRIG
+// Проверяем определен ли макрос
+#ifndef HAVE_XMRIG
+#define HAVE_XMRIG 0
+#endif
+
+#if HAVE_XMRIG
 // Объявления функций из libxmrig.so
 extern "C" {
     int xmrig_start(const char* pool, const char* wallet, int threads);
@@ -32,9 +37,9 @@ static long rejectedShares = 0;
 
 // Поток мониторинга
 void* monitorThread(void* arg) {
-    LOGD("Monitor thread started");
+    LOGD("Monitor thread started. HAVE_XMRIG = %d", HAVE_XMRIG);
     while (isRunning) {
-#ifdef HAVE_XMRIG
+#if HAVE_XMRIG
         currentHashrate = xmrig_hashrate();
         acceptedShares = xmrig_accepted();
         rejectedShares = xmrig_rejected();
@@ -42,10 +47,16 @@ void* monitorThread(void* arg) {
         currentHashrate = mockHashrate;
         acceptedShares = mockAccepted;
         rejectedShares = mockRejected;
-        mockHashrate += 10.0; // Имитация изменений
+        // Имитация изменений для мок-режима
+        static int counter = 0;
+        counter++;
+        if (counter % 5 == 0) {
+            mockHashrate += 10.0;
+            mockAccepted += 5;
+        }
         if (mockHashrate > 2000.0) mockHashrate = 1000.0;
 #endif
-        LOGD("Stats - HR: %.2f, A: %ld, R: %ld", currentHashrate, acceptedShares, rejectedShares);
+        LOGD("Stats - HR: %.2f H/s, A: %ld, R: %ld", currentHashrate, acceptedShares, rejectedShares);
         sleep(2);
     }
     LOGD("Monitor thread stopped");
@@ -72,14 +83,15 @@ Java_com_lottttto_miner_utils_NativeMinerLib_startMining(
     const char* pass = env->GetStringUTFChars(password, nullptr);
     const char* algorithm = env->GetStringUTFChars(algo, nullptr);
 
-    LOGD("Starting mining with pool=%s, wallet=%s, worker=%s, algo=%s, threads=%d",
-         pool, wallet, worker, algorithm, threads);
+    LOGD("Starting mining with pool=%s, wallet=%s, worker=%s, algo=%s, threads=%d, HAVE_XMRIG=%d",
+         pool, wallet, worker, algorithm, threads, HAVE_XMRIG);
 
     int result = 0;
-#ifdef HAVE_XMRIG
+#if HAVE_XMRIG
     result = xmrig_start(pool, wallet, threads);
+    LOGD("XMRIG start result: %d", result);
 #else
-    LOGD("Using mock implementation (XMRig library not found)");
+    LOGD("Using mock implementation (XMRig library not found or disabled)");
     result = 0; // Всегда успех в мок-режиме
 #endif
 
@@ -111,8 +123,9 @@ Java_com_lottttto_miner_utils_NativeMinerLib_stopMining(JNIEnv* env, jobject thi
 
     LOGD("Stopping mining");
     isRunning = false;
-#ifdef HAVE_XMRIG
+#if HAVE_XMRIG
     xmrig_stop();
+    LOGD("XMRIG stopped");
 #endif
     LOGD("Mining stopped");
     return JNI_TRUE;
