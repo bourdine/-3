@@ -1,0 +1,22 @@
+{
+  "pools": [
+    {
+      "coin": "MONERO",
+      "name": "MoneroOcean",
+      "url": "pool.moneroocean.stream:5555",
+      "description": "Popular pool with PPLNS payout"
+    },
+    {
+      "coin": "MONERO",
+      "name": "SupportXMR",
+      "url": "pool.supportxmr.com:5555",
+      "description": "Large pool, low fee"
+    },
+    {
+      "coin": "MONERO",
+      "name": "C3Pool",
+      "url": "c3pool.com:15555",
+      "description": "Mobile-friendly pool"
+    }
+  ]
+}
