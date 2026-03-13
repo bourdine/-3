@@ -15,6 +15,12 @@ endif()
 # Базовая оптимизация для всех архитектур
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -fomit-frame-pointer -funroll-loops")
 
+# Создаем нашу библиотеку-обертку
+add_library(miner_jni SHARED native-lib.cpp)
+
+# Находим системную библиотеку для логирования
+find_library(log-lib log)
+
 # Проверяем существование файла библиотеки
 if(EXISTS ${LIBS_DIR}/${CMAKE_ANDROID_ARCH_ABI}/libxmrig.so)
     message(STATUS "Found libxmrig.so at: ${LIBS_DIR}/${CMAKE_ANDROID_ARCH_ABI}/libxmrig.so")
@@ -26,22 +32,13 @@ if(EXISTS ${LIBS_DIR}/${CMAKE_ANDROID_ARCH_ABI}/libxmrig.so)
         IMPORTED_LOCATION ${LIBS_DIR}/${CMAKE_ANDROID_ARCH_ABI}/libxmrig.so
     )
     
-    set(HAVE_XMRIG TRUE)
+    # Линкуем с реальной библиотекой
+    target_link_libraries(miner_jni xmrig ${log-lib})
+    target_compile_definitions(miner_jni PRIVATE HAVE_XMRIG=1)
+    message(STATUS "Using REAL XMRig library")
 else()
     message(WARNING "libxmrig.so not found! Using mock implementation.")
-    set(HAVE_XMRIG FALSE)
-endif()
-
-# Создаем нашу библиотеку-обертку
-add_library(miner_jni SHARED native-lib.cpp)
-
-# Находим системную библиотеку для логирования
-find_library(log-lib log)
-
-# Линкуем все вместе
-if(HAVE_XMRIG)
-    target_link_libraries(miner_jni xmrig ${log-lib})
-    target_compile_definitions(miner_jni PRIVATE -DHAVE_XMRIG)
-else()
+    # Линкуем только с системными библиотеками
     target_link_libraries(miner_jni ${log-lib})
+    target_compile_definitions(miner_jni PRIVATE HAVE_XMRIG=0)
 endif()
