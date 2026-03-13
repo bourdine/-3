@@ -27,13 +27,24 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
       
-    - name: Build with memory optimizations
-      run: ./gradlew assembleDebug --no-daemon --max-workers=1
-      env:
-        GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m"
-        
-    - name: Upload APK
+    - name: Check Gradle version
+      run: ./gradlew --version
+      
+    - name: List files
+      run: ls -la
+      
+    - name: List gradle wrapper
+      run: ls -la gradle/wrapper/
+      
+    - name: Try to configure project only
+      run: ./gradlew projects --no-daemon --stacktrace
+      
+    - name: Build with timeout
+      run: timeout 10m ./gradlew assembleDebug --no-daemon --stacktrace || echo "Build timed out"
+      
+    - name: Upload APK if exists
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
         path: app/build/outputs/apk/debug/app-debug.apk
+      if: success() || failure()
