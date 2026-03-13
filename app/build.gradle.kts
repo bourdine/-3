@@ -1,8 +1,8 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("com.google.dagger.hilt.android")
-    kotlin("kapt")
+    // id("com.google.dagger.hilt.android")  // временно отключено
+    // kotlin("kapt")                         // временно отключено
 }
 
 android {
@@ -68,10 +68,10 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.8.4")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     
-    // Hilt
-    implementation("com.google.dagger:hilt-android:2.52")
-    kapt("com.google.dagger:hilt-android-compiler:2.52")
-    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+    // Hilt временно отключен
+    // implementation("com.google.dagger:hilt-android:2.52")
+    // kapt("com.google.dagger:hilt-android-compiler:2.52")
+    // implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
     
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
@@ -85,8 +85,4 @@ dependencies {
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.11.00"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
-}
-
-kapt {
-    correctErrorTypes = true
 }
