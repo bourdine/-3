@@ -19,179 +19,294 @@ import com.lottttto.miner.components.StatRow
 import com.lottttto.miner.components.VerticalSlider
 import com.lottttto.miner.models.CoinType
 import com.lottttto.miner.models.MiningMode
-import com.lottttto.miner.viewmodels.MainViewModel   // <-- исправлено
+import com.lottttto.miner.viewmodels.MainViewModel
 import kotlinx.coroutines.delay
 
-// ... остальной код без изменений
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MiningScreen(
-    onBack: () -> Unit,
-    viewModel: MiningViewModel = hiltViewModel()
+fun MainScreen(
+    onNavigateToWallet: () -> Unit,
+    onNavigateToMiningSettings: () -> Unit,
+    onNavigateToMining: () -> Unit,
+    onNavigateToAbout: () -> Unit,
+    onLogout: () -> Unit,
+    viewModel: MainViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val coinType = CoinType.MONERO
-
+    val computingUsage by viewModel.computingUsage.collectAsStateWithLifecycle()
+    val visibleTasks = remember { viewModel.visibleTasks }
+    val wallets by viewModel.wallets.collectAsStateWithLifecycle()
+    var menuExpanded by remember { mutableStateOf(false) }
+    
+    var showBlockNotification by remember { mutableStateOf(false) }
+    var lastBlockAmount by remember { mutableStateOf(0.0) }
+    var lastBlockXmr by remember { mutableStateOf(0.0) }
+    
+    var isMiningActive by remember { mutableStateOf(true) } // по умолчанию запущен
+    
     LaunchedEffect(Unit) {
-        viewModel.loadWalletsForCoin(coinType)
-        viewModel.loadPoolsForCoin(coinType)
+        delay(5000)
+        lastBlockAmount = 0.35
+        lastBlockXmr = 0.002345
+        showBlockNotification = true
     }
+
+    val moneroWallet = wallets.firstOrNull { it.coin == CoinType.MONERO }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(16.dp)
     ) {
-        Text(
-            text = "Monero (XMR)",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-
-        // Выбор кошелька
-        ExposedDropdownMenuBox(
-            expanded = uiState.walletDropdownExpanded,
-            onExpandedChange = { viewModel.toggleWalletDropdown() }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            TextField(
-                value = uiState.selectedWallet?.let {
-                    it.label ?: it.address.take(12) + "..."
-                } ?: "Select Wallet",
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Wallet") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = uiState.walletDropdownExpanded) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .menuAnchor()
-            )
-            ExposedDropdownMenu(
-                expanded = uiState.walletDropdownExpanded,
-                onDismissRequest = { viewModel.toggleWalletDropdown() }
-            ) {
-                uiState.walletsForCoin.forEach { wallet ->
+            Text("Lottttto", style = MaterialTheme.typography.headlineLarge)
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(Icons.Default.Settings, contentDescription = "Settings")
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
                     DropdownMenuItem(
-                        text = { Text(wallet.label ?: wallet.address, maxLines = 1) },
+                        text = { Text("⚙️ Настройки майнинга Monero") },
                         onClick = {
-                            viewModel.selectWallet(wallet)
-                            viewModel.toggleWalletDropdown()
+                            menuExpanded = false
+                            onNavigateToMiningSettings()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("👛 Кошелёк") },
+                        onClick = {
+                            menuExpanded = false
+                            onNavigateToWallet()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("ℹ️ About") },
+                        onClick = {
+                            menuExpanded = false
+                            onNavigateToAbout()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("🚪 Выход") },
+                        onClick = {
+                            menuExpanded = false
+                            onLogout()
                         }
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // Переключатель режимов
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center
-        ) {
-            MiningMode.values().forEach { mode ->
-                FilterChip(
-                    selected = uiState.selectedMode == mode,
-                    onClick = { viewModel.selectMode(mode) },
-                    label = { Text(mode.name) },
-                    modifier = Modifier.padding(horizontal = 4.dp)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Выбор пула (только для Pool режима)
-        if (uiState.selectedMode == MiningMode.POOL) {
-            ExposedDropdownMenuBox(
-                expanded = uiState.poolDropdownExpanded,
-                onExpandedChange = { viewModel.togglePoolDropdown() }
+        if (showBlockNotification) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                ),
+                elevation = CardDefaults.cardElevation(4.dp)
             ) {
-                TextField(
-                    value = uiState.selectedPool?.name ?: "Select Pool",
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Pool") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = uiState.poolDropdownExpanded) },
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor()
-                )
-                ExposedDropdownMenu(
-                    expanded = uiState.poolDropdownExpanded,
-                    onDismissRequest = { viewModel.togglePoolDropdown() }
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    uiState.availablePools.forEach { pool ->
-                        DropdownMenuItem(
-                            text = {
-                                Column {
-                                    Text(pool.name)
-                                    Text(pool.url, style = MaterialTheme.typography.bodySmall)
-                                }
-                            },
-                            onClick = {
-                                viewModel.selectPool(pool)
-                                viewModel.togglePoolDropdown()
-                            }
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("🎉", fontSize = 24.sp, modifier = Modifier.padding(end = 8.dp))
+                        Column {
+                            Text(
+                                "Block found! Congratulations!",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                "You mined %.6f XMR (%.2f)".format(lastBlockXmr, lastBlockAmount),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = { showBlockNotification = false },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        if (moneroWallet != null) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(4.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Monero Wallet", style = MaterialTheme.typography.titleMedium)
+                        IconButton(onClick = { /* menu */ }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Menu")
+                        }
+                    }
+                    Text(
+                        text = "Address: ${moneroWallet.address.take(16)}...${moneroWallet.address.takeLast(8)}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        text = "Balance: 0.1234 XMR  ≈  $18.51",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = onNavigateToWallet,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Manage Wallet")
+                    }
+                }
+            }
+        } else {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("No Monero wallet yet")
+                    Button(onClick = onNavigateToWallet) {
+                        Text("Add")
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // Карточка со статистикой
         Card(
             modifier = Modifier.fillMaxWidth(),
             elevation = CardDefaults.cardElevation(4.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                StatRow("Hashrate", formatHashrate(uiState.hashrate))
-                StatRow("Accepted", uiState.acceptedShares.toString())
-                StatRow("Rejected", uiState.rejectedShares.toString())
-                StatRow("Blocks Found", "3")
-                StatRow("Est. earnings", "%.8f XMR".format(uiState.estimatedEarnings))
+                Text("Current mining session", style = MaterialTheme.typography.titleMedium)
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                StatRow("Hashrate:", "1,250 H/s")
+                StatRow("Accepted shares:", "12,345")
+                StatRow("Rejected shares:", "123")
+                StatRow("Blocks found:", "3 ${if (showBlockNotification) "(+1 new!)" else ""}", highlight = showBlockNotification)
+                StatRow("Session earnings:", "%.6f XMR".format(lastBlockXmr * 3))
+                StatRow("Total earnings:", "0.1567 XMR")
             }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // Кнопка запуска/остановки
-        Button(
-            onClick = {
-                if (uiState.isMining) {
-                    viewModel.stopMining()
-                } else {
-                    if (uiState.selectedWallet == null) return@Button
-                    val pool = if (uiState.selectedMode == MiningMode.POOL) uiState.selectedPool else null
-                    viewModel.startMining(
-                        coin = coinType,
-                        mode = uiState.selectedMode,
-                        pool = pool,
-                        wallet = uiState.selectedWallet!!
-                    )
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            enabled = uiState.selectedWallet != null && (uiState.selectedMode != MiningMode.POOL || uiState.selectedPool != null),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (uiState.isMining) MaterialTheme.colorScheme.error
-                else MaterialTheme.colorScheme.primary
-            )
+        Text("Computing usage · $computingUsage%", style = MaterialTheme.typography.titleMedium)
+        Slider(
+            value = computingUsage.toFloat(),
+            onValueChange = { viewModel.setComputingUsage(it.toInt()) },
+            valueRange = 0f..100f,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text("Resource allocation", style = MaterialTheme.typography.titleMedium)
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            Text(if (uiState.isMining) "Stop mining" else "Start mining")
-        }
-    }
-}
+            visibleTasks.forEachIndexed { index, task ->
+                val realIndex = viewModel.getRealIndex(index)
+                val percent = viewModel.getVisiblePercentage(index)
+                val label = if (task.mode == MiningMode.POOL) "Pool" else "Solo"
+                val activeText = if (task.mode == MiningMode.POOL) "MoneroOcean" else "Solo mode"
 
-private fun formatHashrate(hashrate: Double): String {
-    return when {
-        hashrate >= 1_000_000 -> "${DecimalFormat("#.##").format(hashrate / 1_000_000)} MH/s"
-        hashrate >= 1_000 -> "${DecimalFormat("#.##").format(hashrate / 1_000)} KH/s"
-        else -> "${DecimalFormat("#.##").format(hashrate)} H/s"
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(label, style = MaterialTheme.typography.labelLarge)
+                    VerticalSlider(
+                        value = task.weight,
+                        onValueChange = { viewModel.updateTaskWeight(realIndex, it) },
+                        modifier = Modifier.height(150.dp)
+                    )
+                    Text("%.0f%%".format(percent))
+                    Text(activeText, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("System status", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                StatRow("Temperature:", "35°C")
+                StatRow("Battery:", "78%")
+                StatRow("Network:", "WiFi connected")
+                StatRow("Uptime:", "2h 15m")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = { isMiningActive = !isMiningActive },
+                modifier = Modifier.weight(1f),
+                enabled = !isMiningActive,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (!isMiningActive) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                )
+            ) {
+                Text("Start mining")
+            }
+            Button(
+                onClick = { isMiningActive = !isMiningActive },
+                modifier = Modifier.weight(1f),
+                enabled = isMiningActive,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isMiningActive) MaterialTheme.colorScheme.error
+                                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                )
+            ) {
+                Text("Stop mining")
+            }
+        }
+        
+        Text(
+            text = if (isMiningActive) "✓ Mining is active" else "○ Mining is stopped",
+            style = MaterialTheme.typography.bodySmall,
+            color = if (isMiningActive) Color.Green else Color.Gray,
+            modifier = Modifier.padding(top = 4.dp).align(Alignment.CenterHorizontally)
+        )
     }
 }
