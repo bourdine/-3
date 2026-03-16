@@ -3,8 +3,7 @@ package com.lottttto.miner.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lottttto.miner.models.*
-import com.lottttto.miner.repositories.MiningRepositoryImpl
-import com.lottttto.miner.repositories.PoolRepositoryImpl
+import com.lottttto.miner.repositories.SettingsRepositoryImpl
 import com.lottttto.miner.repositories.WalletRepositoryImpl
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -12,76 +11,86 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
-class MiningViewModel @Inject constructor(
-    private val miningRepository: MiningRepositoryImpl,
-    private val walletRepository: WalletRepositoryImpl,
-    private val poolRepository: PoolRepositoryImpl
+class MainViewModel @Inject constructor(
+    private val settingsRepository: SettingsRepositoryImpl,
+    private val walletRepository: WalletRepositoryImpl
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(MiningUiState())
-    val uiState: StateFlow<MiningUiState> = _uiState.asStateFlow()
+    private val _tasks = MutableStateFlow(
+        listOf(
+            MiningTask(CoinType.MONERO, MiningMode.POOL),
+            MiningTask(CoinType.MONERO, MiningMode.SOLO)
+        ).toMutableList()
+    )
+    val tasks: StateFlow<List<MiningTask>> = _tasks.asStateFlow()
+
+    private val visibleIndices = listOf(0, 1)
+    val visibleTasks: List<MiningTask> get() = visibleIndices.map { _tasks.value[it] }
+
+    fun getRealIndex(visiblePosition: Int): Int = visibleIndices[visiblePosition]
+
+    private val _computingUsage = MutableStateFlow(15)
+    val computingUsage: StateFlow<Int> = _computingUsage.asStateFlow()
+
+    private val _displayPercentages = MutableStateFlow<List<Double>>(emptyList())
+    val displayPercentages: StateFlow<List<Double>> = _displayPercentages.asStateFlow()
+
+    private val _wallets = MutableStateFlow<List<Wallet>>(emptyList())
+    val wallets: StateFlow<List<Wallet>> = _wallets.asStateFlow()
 
     init {
-        combine(
-            miningRepository.miningStats,
-            miningRepository.isMiningActive,
-            walletRepository.getAllWallets(),
-            flow { emit(poolRepository.getPoolsForCoin(CoinType.MONERO)) }
-        ) { stats, isActive, wallets, pools ->
-            _uiState.update { current ->
-                current.copy(
-                    currentCoin = stats.coin,
-                    hashrate = stats.hashrate,
-                    acceptedShares = stats.acceptedShares,
-                    rejectedShares = stats.rejectedShares,
-                    estimatedEarnings = stats.estimatedEarnings,
-                    isMining = isActive,
-                    allWallets = wallets,
-                    allPools = pools
-                )
+        viewModelScope.launch {
+            settingsRepository.getComputingUsage().collect { usage ->
+                _computingUsage.value = usage
+                recalcPercentages()
             }
-        }.launchIn(viewModelScope)
-    }
-
-    fun loadPoolsForCoin(coin: CoinType) {
+        }
         viewModelScope.launch {
-            _uiState.update { it.copy(availablePools = poolRepository.getPoolsForCoin(coin)) }
+            settingsRepository.getTaskWeights().collect { weights ->
+                if (weights.size == _tasks.value.size) {
+                    _tasks.value = _tasks.value.mapIndexed { index, task ->
+                        task.copy(weight = weights[index])
+                    }.toMutableList()
+                    recalcPercentages()
+                }
+            }
+        }
+        viewModelScope.launch {
+            walletRepository.getAllWallets().collect { wallets ->
+                _wallets.value = wallets
+            }
         }
     }
 
-    fun loadWalletsForCoin(coin: CoinType) {
+    fun updateTaskWeight(realIndex: Int, newWeight: Int) {
+        if (realIndex !in _tasks.value.indices) return
+        _tasks.value = _tasks.value.toMutableList().apply {
+            this[realIndex] = this[realIndex].copy(weight = newWeight.coerceIn(0, 100))
+        }
+        recalcPercentages()
         viewModelScope.launch {
-            _uiState.update { it.copy(walletsForCoin = walletRepository.getWalletsForCoin(coin)) }
+            settingsRepository.saveTaskWeights(_tasks.value.map { it.weight })
         }
     }
 
-    fun selectMode(mode: MiningMode) { _uiState.update { it.copy(selectedMode = mode) } }
-    fun selectPool(pool: Pool) { _uiState.update { it.copy(selectedPool = pool) } }
-    fun selectWallet(wallet: Wallet) { _uiState.update { it.copy(selectedWallet = wallet) } }
-    fun toggleWalletDropdown() { _uiState.update { it.copy(walletDropdownExpanded = !it.walletDropdownExpanded) } }
-    fun togglePoolDropdown() { _uiState.update { it.copy(poolDropdownExpanded = !it.poolDropdownExpanded) } }
-
-    fun startMining(coin: CoinType, mode: MiningMode, pool: Pool?, wallet: Wallet) {
-        viewModelScope.launch { miningRepository.startMining(coin, mode, pool, wallet) }
+    fun setComputingUsage(percent: Int) {
+        _computingUsage.value = percent.coerceIn(0, 100)
+        viewModelScope.launch {
+            settingsRepository.saveComputingUsage(_computingUsage.value)
+        }
+        recalcPercentages()
     }
 
-    fun stopMining() { viewModelScope.launch { miningRepository.stopMining() } }
+    private fun recalcPercentages() {
+        val totalWeight = _tasks.value.sumOf { it.weight }.toDouble()
+        val usage = _computingUsage.value.toDouble()
+        _displayPercentages.value = if (totalWeight > 0) {
+            _tasks.value.map { (it.weight / totalWeight) * usage }
+        } else {
+            List(_tasks.value.size) { 0.0 }
+        }
+    }
+
+    fun getVisiblePercentage(visiblePosition: Int): Double =
+        _displayPercentages.value.getOrNull(getRealIndex(visiblePosition)) ?: 0.0
 }
-
-data class MiningUiState(
-    val selectedMode: MiningMode = MiningMode.POOL,
-    val selectedPool: Pool? = null,
-    val selectedWallet: Wallet? = null,
-    val walletDropdownExpanded: Boolean = false,
-    val poolDropdownExpanded: Boolean = false,
-    val currentCoin: CoinType = CoinType.MONERO,
-    val hashrate: Double = 0.0,
-    val acceptedShares: Long = 0,
-    val rejectedShares: Long = 0,
-    val estimatedEarnings: Double = 0.0,
-    val isMining: Boolean = false,
-    val availablePools: List<Pool> = emptyList(),
-    val walletsForCoin: List<Wallet> = emptyList(),
-    val allWallets: List<Wallet> = emptyList(),
-    val allPools: List<Pool> = emptyList()
-)
